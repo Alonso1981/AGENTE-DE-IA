@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MINDOS - AI Operating System</title>
+    <meta name="description" content="AI Memory, Personality, Knowledge, Agents & Automation Operating System" />
+    <meta property="og:title" content="MINDOS - AI Operating System" />
+    <meta property="og:description" content="AI Memory, Personality, Knowledge, Agents & Automation Operating System" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      (function() {
+        try {
+          var rawFetch = window.fetch;
+          var currentFetch = rawFetch ? rawFetch.bind(window) : rawFetch;
+          Object.defineProperty(window, 'fetch', {
+            get: function() {
+              return currentFetch;
+            },
+            set: function(val) {
+              currentFetch = val;
+            },
+            configurable: true,
+            enumerable: true
+          });
+          if (typeof Window !== 'undefined' && Window.prototype) {
+            try {
+              var protoDesc = Object.getOwnPropertyDescriptor(Window.prototype, 'fetch');
+              if (protoDesc && protoDesc.configurable) {
+                Object.defineProperty(Window.prototype, 'fetch', {
+                  get: function() {
+                    return currentFetch;
+                  },
+                  set: function(val) {
+                    currentFetch = val;
+                  },
+                  configurable: true,
+                  enumerable: true
+                });
+              }
+            } catch (_) {}
+          }
+        } catch (e) {
+          console.warn('Fetch setter safeguard error:', e);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

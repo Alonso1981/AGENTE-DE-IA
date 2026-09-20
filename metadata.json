@@ -1,0 +1,6 @@
+{
+  "name": "MINDOS - AI Operating System",
+  "description": "AI Memory, Personality, Knowledge, Agents & Automation Operating System",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
