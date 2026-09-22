@@ -19,7 +19,20 @@ export function createApp(): Express {
     next();
   });
 
-  app.use(express.json());
+  // Support pre-parsed body (Vercel serverless) and stream body (standard Node)
+  app.use((req, res, next) => {
+    if (req.body && typeof req.body === 'object') {
+      return next();
+    }
+    express.json({ limit: '10mb' })(req, res, (err) => {
+      if (err) {
+        console.warn('Body JSON parse warning:', err.message);
+        req.body = {};
+      }
+      next();
+    });
+  });
+  app.use(express.urlencoded({ extended: true }));
 
   // Create unified API router
   const api = Router();
@@ -216,9 +229,9 @@ export function createApp(): Express {
   // Chat Orchestration Endpoint
   api.post('/chat/message', async (req, res) => {
     try {
-      const { conversationId, message, projectId, agentId } = req.body;
-      if (!message || !message.trim()) {
-        return res.status(400).json({ error: 'message é obrigatório' });
+      const { conversationId, message, projectId, agentId } = req.body || {};
+      if (!message || typeof message !== 'string' || !message.trim()) {
+        return res.status(400).json({ error: 'message é obrigatório e deve ser texto' });
       }
       const safeConvId = conversationId || `conv-${Date.now()}`;
       const result = await processOrchestration({
@@ -230,19 +243,19 @@ export function createApp(): Express {
       res.json(result);
     } catch (err: any) {
       console.error('Orchestration error:', err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err.message || 'Erro ao processar mensagem no orquestrador' });
     }
   });
 
   // Video Agents Studio Endpoint (Gemini-powered short & long video production)
   api.post('/video/generate', async (req, res) => {
     try {
-      const { topic, format, targetDuration, niche, tone, platform, callToAction, additionalInstructions } = req.body;
-      if (!topic) {
+      const { topic, format, targetDuration, niche, tone, platform, callToAction, additionalInstructions } = req.body || {};
+      if (!topic || typeof topic !== 'string' || !topic.trim()) {
         return res.status(400).json({ error: 'O tema do vídeo é obrigatório.' });
       }
       const project = await generateVideoProject({
-        topic,
+        topic: topic.trim(),
         format: format || 'short',
         targetDuration: targetDuration || (format === 'long' ? '5-8min' : '30s'),
         niche,
@@ -254,7 +267,7 @@ export function createApp(): Express {
       res.json(project);
     } catch (err: any) {
       console.error('Video generation route error:', err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err.message || 'Erro ao gerar roteiro de vídeo' });
     }
   });
 

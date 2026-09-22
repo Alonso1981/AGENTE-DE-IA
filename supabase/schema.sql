@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
     role VARCHAR(50) NOT NULL, -- 'user', 'assistant', 'system'
+    agent_id VARCHAR(50) DEFAULT 'orchestrator',
     content TEXT NOT NULL,
     extracted_memories JSONB DEFAULT '[]'::jsonb,
     duration_ms INTEGER,
