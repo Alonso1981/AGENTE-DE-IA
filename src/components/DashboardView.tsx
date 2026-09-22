@@ -13,6 +13,7 @@ import {
   Layers,
   FileCheck,
   Film,
+  Bot,
 } from 'lucide-react';
 import { Memory, Conversation, FamilyMember, AuditLog, SystemStatus } from '../types';
 import { NavTab } from './Sidebar';
@@ -62,6 +63,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <button
+              onClick={() => onNavigate('agents')}
+              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow-lg shadow-emerald-950/40"
+            >
+              <Bot className="w-4 h-4" />
+              Central de Agentes
+            </button>
             <button
               onClick={() => onNavigate('video-agents')}
               className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow-lg shadow-purple-950/40"

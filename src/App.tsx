@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { ChatView } from './components/ChatView';
+import { AgentsHubView } from './components/AgentsHubView';
 import { MemoriesView } from './components/MemoriesView';
 import { HistoryView } from './components/HistoryView';
 import { FamilyView } from './components/FamilyView';
@@ -22,6 +23,7 @@ import {
   AuditLog,
   SystemStatus,
   MemoryCandidate,
+  AgentId,
 } from './types';
 
 export default function App() {
@@ -39,6 +41,13 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
 
+  const skipMessageFetchRef = useRef(false);
+  const activeConversationIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeConversationIdRef.current = currentConversationId;
+  }, [currentConversationId]);
+
   // Future phase modal state
   const [futureModalData, setFutureModalData] = useState<{
     phase: number;
@@ -46,11 +55,18 @@ export default function App() {
     desc: string;
   } | null>(null);
 
-  // Quick memory modal trigger from header or dashboard
-  const [openNewMemoryModalDirect, setOpenNewMemoryModalDirect] = useState(false);
-
-  // Fetch initial data
+  // Fetch initial data safely
   const loadInitialData = useCallback(async () => {
+    const safeFetch = async (url: string) => {
+      try {
+        const r = await fetch(url);
+        if (!r.ok) return null;
+        return await r.json();
+      } catch {
+        return null;
+      }
+    };
+
     try {
       const [
         statusRes,
@@ -62,19 +78,19 @@ export default function App() {
         convsRes,
         auditRes,
       ] = await Promise.all([
-        fetch('/api/status').then((r) => r.json()),
-        fetch('/api/profile').then((r) => r.json()),
-        fetch('/api/preferences').then((r) => r.json()),
-        fetch('/api/family').then((r) => r.json()),
-        fetch('/api/projects').then((r) => r.json()),
-        fetch('/api/memories').then((r) => r.json()),
-        fetch('/api/conversations').then((r) => r.json()),
-        fetch('/api/audit-logs').then((r) => r.json()),
+        safeFetch('/api/status'),
+        safeFetch('/api/profile'),
+        safeFetch('/api/preferences'),
+        safeFetch('/api/family'),
+        safeFetch('/api/projects'),
+        safeFetch('/api/memories'),
+        safeFetch('/api/conversations'),
+        safeFetch('/api/audit-logs'),
       ]);
 
-      setSystemStatus(statusRes);
-      setProfile(profileRes);
-      setPreferences(prefRes);
+      if (statusRes) setSystemStatus(statusRes);
+      if (profileRes) setProfile(profileRes);
+      if (prefRes) setPreferences(prefRes);
       if (familyRes) {
         setFamily(familyRes.family);
         setFamilyMembers(familyRes.members || []);
@@ -87,10 +103,10 @@ export default function App() {
       // If conversations exist, set the first one as active
       if (convsRes && convsRes.length > 0) {
         setCurrentConversationId(convsRes[0].id);
-        const msgs = await fetch(`/api/conversations/${convsRes[0].id}/messages`).then((r) =>
-          r.json()
-        );
-        setMessages(msgs || []);
+        const msgs = await safeFetch(`/api/conversations/${convsRes[0].id}/messages`);
+        if (Array.isArray(msgs)) {
+          setMessages(msgs);
+        }
       }
     } catch (err) {
       console.error('Error loading initial MINDOS data:', err);
@@ -104,43 +120,60 @@ export default function App() {
   // Load messages when active conversation changes
   useEffect(() => {
     if (!currentConversationId) return;
+    if (skipMessageFetchRef.current) {
+      skipMessageFetchRef.current = false;
+      return;
+    }
     fetch(`/api/conversations/${currentConversationId}/messages`)
       .then((r) => r.json())
-      .then((msgs) => setMessages(msgs || []))
+      .then((msgs) => {
+        if (Array.isArray(msgs)) {
+          setMessages(msgs);
+        }
+      })
       .catch((err) => console.error('Error loading messages:', err));
   }, [currentConversationId]);
 
   // Chat message sending
-  const handleSendMessage = async (text: string) => {
-    let activeConvId = currentConversationId;
+  const handleSendMessage = async (text: string, agentId?: AgentId) => {
+    if (!text.trim()) return;
 
-    // Create conversation if none exists
+    let activeConvId = activeConversationIdRef.current;
+
+    // Ensure we always have an active conversation ID
     if (!activeConvId) {
-      try {
-        const newConvRes = await fetch('/api/conversations', {
+      if (conversations.length > 0) {
+        activeConvId = conversations[0].id;
+        skipMessageFetchRef.current = false;
+        setCurrentConversationId(activeConvId);
+      } else {
+        activeConvId = `conv-${Date.now()}`;
+        skipMessageFetchRef.current = true;
+        setCurrentConversationId(activeConvId);
+        // Create conversation in background
+        fetch('/api/conversations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: text.length > 30 ? text.substring(0, 30) + '...' : text,
           }),
-        });
-        const createdConv = await newConvRes.json();
-        activeConvId = createdConv.id;
-        setCurrentConversationId(createdConv.id);
-        setConversations((prev) => [createdConv, ...prev]);
-      } catch (err) {
-        console.error('Error creating conversation:', err);
-        return;
+        })
+          .then((r) => r.json())
+          .then((created) => {
+            if (created && created.id) {
+              setConversations((prev) => [created, ...prev]);
+            }
+          })
+          .catch(() => {});
       }
     }
 
-    if (!activeConvId) return;
-
-    // Optimistically add user message to UI
+    // Optimistically add user message to UI immediately
     const tempUserMsg: ChatMessage = {
       id: `temp-${Date.now()}`,
       conversation_id: activeConvId,
       role: 'user',
+      agent_id: agentId || 'orchestrator',
       content: text,
       created_at: new Date().toISOString(),
     };
@@ -154,24 +187,39 @@ export default function App() {
         body: JSON.stringify({
           conversationId: activeConvId,
           message: text,
+          agentId: agentId || 'orchestrator',
         }),
       });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Erro HTTP ${res.status}`);
+      }
+
       const data = await res.json();
 
       if (data.responseMessage) {
-        // Replace temp or add response message
         setMessages((prev) => [...prev, data.responseMessage]);
       }
 
       // Refresh memories and audit logs if extracted
       const [updatedMemories, updatedAuditLogs] = await Promise.all([
-        fetch('/api/memories').then((r) => r.json()),
-        fetch('/api/audit-logs').then((r) => r.json()),
+        fetch('/api/memories').then((r) => r.json()).catch(() => []),
+        fetch('/api/audit-logs').then((r) => r.json()).catch(() => []),
       ]);
-      setMemories(updatedMemories || []);
-      setAuditLogs(updatedAuditLogs || []);
-    } catch (err) {
+      if (Array.isArray(updatedMemories)) setMemories(updatedMemories);
+      if (Array.isArray(updatedAuditLogs)) setAuditLogs(updatedAuditLogs);
+    } catch (err: any) {
       console.error('Error sending message to orchestrator:', err);
+      const errorMsg: ChatMessage = {
+        id: `err-${Date.now()}`,
+        conversation_id: activeConvId,
+        role: 'assistant',
+        agent_id: agentId || 'orchestrator',
+        content: `⚠️ Não foi possível obter resposta do agente no momento: ${err.message || 'Erro de conexão'}. Por favor, tente enviar novamente.`,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsChatLoading(false);
     }
@@ -190,26 +238,38 @@ export default function App() {
           subject: candidate.subject,
           tags: candidate.tags,
           confidence_score: 1.0,
-          source: 'validacao_usuario',
+          source: 'revisao_manual_usuario',
+          is_shared_family: false,
         }),
       });
-      const created = await res.json();
-      setMemories((prev) => [created, ...prev]);
+      const newMem = await res.json();
+      setMemories((prev) => [newMem, ...prev]);
+
+      // Remove candidate pill from message state
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (!m.extracted_memories) return m;
+          return {
+            ...m,
+            extracted_memories: m.extracted_memories.filter((c) => c.content !== candidate.content),
+          };
+        })
+      );
     } catch (err) {
       console.error('Error confirming candidate memory:', err);
     }
   };
 
   // Memory CRUD
-  const handleCreateMemory = async (mem: Partial<Memory>) => {
+  const handleCreateMemory = async (memData: Partial<Memory>) => {
     try {
       const res = await fetch('/api/memories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(mem),
+        body: JSON.stringify(memData),
       });
-      const created = await res.json();
-      setMemories((prev) => [created, ...prev]);
+      const newMem = await res.json();
+      setMemories((prev) => [newMem, ...prev]);
     } catch (err) {
       console.error('Error creating memory:', err);
     }
@@ -247,6 +307,7 @@ export default function App() {
         body: JSON.stringify({ title: 'Nova Sessão' }),
       });
       const conv = await res.json();
+      skipMessageFetchRef.current = true;
       setConversations((prev) => [conv, ...prev]);
       setCurrentConversationId(conv.id);
       setMessages([]);
@@ -263,6 +324,7 @@ export default function App() {
       if (currentConversationId === id) {
         const remaining = conversations.filter((c) => c.id !== id);
         if (remaining.length > 0) {
+          skipMessageFetchRef.current = false;
           setCurrentConversationId(remaining[0].id);
         } else {
           setCurrentConversationId(null);
@@ -291,7 +353,6 @@ export default function App() {
     }
   };
 
-  // Profile update
   const handleUpdateProfile = async (updates: Partial<UserProfile>) => {
     try {
       const res = await fetch('/api/profile', {
@@ -306,7 +367,6 @@ export default function App() {
     }
   };
 
-  // Preferences update
   const handleUpdatePreferences = async (updates: Partial<UserPreferences>) => {
     try {
       const res = await fetch('/api/preferences', {
@@ -321,20 +381,28 @@ export default function App() {
     }
   };
 
+  const handleSelectConversation = (id: string) => {
+    skipMessageFetchRef.current = false;
+    setCurrentConversationId(id);
+    setCurrentTab('chat');
+  };
+
   const currentConv = conversations.find((c) => c.id === currentConversationId) || null;
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 antialiased overflow-hidden font-sans">
-      {/* Navigation Sidebar */}
+    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+      {/* Sidebar Navigation */}
       <Sidebar
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
         systemStatus={systemStatus}
-        onOpenFuturePhase={(phase, title, desc) => setFutureModalData({ phase, title, desc })}
+        onOpenFuturePhase={(phase, title, desc) => {
+          setFutureModalData({ phase, title, desc });
+        }}
       />
 
-      {/* Main View Area */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+      {/* Main Workspace Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header
           currentTab={currentTab}
           profile={profile}
@@ -353,10 +421,7 @@ export default function App() {
               auditLogs={auditLogs}
               systemStatus={systemStatus}
               onNavigate={setCurrentTab}
-              onSelectConversation={(id) => {
-                setCurrentConversationId(id);
-                setCurrentTab('chat');
-              }}
+              onSelectConversation={handleSelectConversation}
               onOpenNewMemoryModal={() => setCurrentTab('memories')}
             />
           )}
@@ -372,6 +437,28 @@ export default function App() {
               onSendMessage={handleSendMessage}
               onPromoteCandidateToConfirmed={handlePromoteCandidateToConfirmed}
               onNewChat={handleNewChat}
+            />
+          )}
+
+          {currentTab === 'agents' && (
+            <AgentsHubView
+              onNavigateToChat={(initialMessage, agentId) => {
+                setCurrentTab('chat');
+                if (initialMessage) {
+                  handleSendMessage(initialMessage, agentId);
+                }
+              }}
+              onSaveToMemories={async (title, content) => {
+                await handleCreateMemory({
+                  content: `${title}: ${content}`,
+                  category: 'project',
+                  type: 'CANDIDATE',
+                  subject: 'Diretriz de Agente',
+                  tags: ['agente', 'diretriz'],
+                  confidence_score: 0.95,
+                  is_shared_family: false,
+                });
+              }}
             />
           )}
 
@@ -404,10 +491,7 @@ export default function App() {
             <HistoryView
               conversations={conversations}
               projects={projects}
-              onSelectConversation={(id) => {
-                setCurrentConversationId(id);
-                setCurrentTab('chat');
-              }}
+              onSelectConversation={handleSelectConversation}
               onNewConversation={handleNewChat}
               onDeleteConversation={handleDeleteConversation}
             />
@@ -425,13 +509,19 @@ export default function App() {
             />
           )}
 
-          {currentTab === 'audit' && <AuditSecurityView auditLogs={auditLogs} />}
+          {currentTab === 'audit' && (
+            <AuditSecurityView auditLogs={auditLogs} />
+          )}
 
-          {currentTab === 'settings' && <SettingsView systemStatus={systemStatus} />}
+          {currentTab === 'settings' && (
+            <SettingsView
+              systemStatus={systemStatus}
+            />
+          )}
         </main>
       </div>
 
-      {/* Informational Future Phase Modal */}
+      {/* Planned Future Phase Educational Modal */}
       {futureModalData && (
         <FuturePhaseModal
           phaseNumber={futureModalData.phase}

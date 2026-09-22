@@ -44,6 +44,7 @@ export const VideoStudioView: React.FC<VideoStudioViewProps> = ({ onSaveToMemori
   const [currentProject, setCurrentProject] = useState<VideoProject | null>(null);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'scenes' | 'teleprompter' | 'aiPrompts' | 'seo'>('scenes');
+  const [mobileTab, setMobileTab] = useState<'form' | 'result'>('form');
 
   // Quick preset templates for one-click inspiration
   const quickPresets = [
@@ -104,6 +105,7 @@ export const VideoStudioView: React.FC<VideoStudioViewProps> = ({ onSaveToMemori
     setError(null);
     setLoading(true);
     setLoadingStep(1);
+    setMobileTab('result');
 
     // Simulated progress steps for specialized sub-agents
     const timer1 = setTimeout(() => setLoadingStep(2), 1500);
@@ -127,12 +129,14 @@ export const VideoStudioView: React.FC<VideoStudioViewProps> = ({ onSaveToMemori
       });
 
       if (!res.ok) {
-        throw new Error('Falha ao acionar os agentes de vídeo.');
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Falha ao acionar os agentes de vídeo.');
       }
 
       const data: VideoProject = await res.json();
       setCurrentProject(data);
       setActiveTab('scenes');
+      setMobileTab('result');
     } catch (err: any) {
       console.error('Error generating video project:', err);
       setError(err.message || 'Erro inesperado ao gerar o roteiro.');
@@ -253,10 +257,42 @@ export const VideoStudioView: React.FC<VideoStudioViewProps> = ({ onSaveToMemori
         </div>
       </header>
 
+      {/* Mobile View Toggle (hidden on lg screens) */}
+      <div className="lg:hidden flex items-center bg-slate-950 border-b border-slate-800 p-2 gap-2 shrink-0">
+        <button
+          type="button"
+          onClick={() => setMobileTab('form')}
+          className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+            mobileTab === 'form'
+              ? 'bg-cyan-500 text-slate-950 shadow'
+              : 'bg-slate-900 text-slate-400 hover:text-white'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          1. Configurar & Prompt
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('result')}
+          className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+            mobileTab === 'result'
+              ? 'bg-cyan-500 text-slate-950 shadow'
+              : 'bg-slate-900 text-slate-400 hover:text-white'
+          }`}
+        >
+          <Film className="w-3.5 h-3.5" />
+          2. Roteiro & Prompts {currentProject ? '(Pronto)' : ''}
+        </button>
+      </div>
+
       {/* Main Studio Body */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Left Column: Generator Form & Parameters */}
-        <div className="w-full lg:w-96 border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-950/40 p-5 overflow-y-auto space-y-5 shrink-0">
+        <div
+          className={`w-full lg:w-96 border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-950/40 p-5 overflow-y-auto space-y-5 shrink-0 ${
+            mobileTab === 'form' ? 'block' : 'hidden lg:block'
+          }`}
+        >
           {/* Quick Presets */}
           <div>
             <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-2.5">
@@ -286,12 +322,21 @@ export const VideoStudioView: React.FC<VideoStudioViewProps> = ({ onSaveToMemori
           <form onSubmit={handleGenerate} className="space-y-4">
             {/* Topic Input */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Tema / Ideia Central do Vídeo <span className="text-cyan-400">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Tema / Ideia Central do Vídeo <span className="text-cyan-400">*</span>
+                </label>
+                <span className="text-[10px] text-slate-400">Enter para gerar (Shift+Enter quebra linha)</span>
+              </div>
               <textarea
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleGenerate();
+                  }
+                }}
                 placeholder={
                   format === 'short'
                     ? 'Ex: 3 sinais de que você está perdendo dinheiro na farmácia por falta de processos...'
@@ -300,6 +345,15 @@ export const VideoStudioView: React.FC<VideoStudioViewProps> = ({ onSaveToMemori
                 rows={3}
                 className="w-full rounded-xl bg-slate-900 border border-slate-700/80 px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 resize-none transition-all"
               />
+              <button
+                type="button"
+                onClick={() => handleGenerate()}
+                disabled={loading || !topic.trim()}
+                className="mt-2 w-full py-2 px-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-sm disabled:opacity-40"
+              >
+                {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                {loading ? 'Gerando com IA...' : '⚡ Acionar Agentes & Criar Roteiro'}
+              </button>
             </div>
 
             {/* Target Duration & Platform */}
@@ -444,7 +498,11 @@ export const VideoStudioView: React.FC<VideoStudioViewProps> = ({ onSaveToMemori
         </div>
 
         {/* Right Column: Output Viewer */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-slate-900">
+        <div
+          className={`flex-1 flex flex-col overflow-hidden bg-slate-900 ${
+            mobileTab === 'result' ? 'flex' : 'hidden lg:flex'
+          }`}
+        >
           {currentProject ? (
             <div className="flex-1 flex flex-col h-full overflow-hidden">
               {/* Project Header Bar */}

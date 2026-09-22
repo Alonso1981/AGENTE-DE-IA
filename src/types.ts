@@ -73,11 +73,25 @@ export interface Project {
   created_at: string;
 }
 
+export type AgentId = 'orchestrator' | 'business' | 'video' | 'content' | 'automation';
+
+export interface AgentDefinition {
+  id: AgentId;
+  name: string;
+  role: string;
+  description: string;
+  badge: string;
+  color: string;
+  avatarIcon: string;
+  suggestedPrompts: string[];
+}
+
 export interface Conversation {
   id: string;
   user_id: string;
   family_id: string;
   project_id?: string | null;
+  agent_id?: AgentId;
   title: string;
   summary?: string;
   created_at: string;
@@ -88,6 +102,7 @@ export interface ChatMessage {
   id: string;
   conversation_id: string;
   role: 'user' | 'assistant' | 'system';
+  agent_id?: AgentId;
   content: string;
   extracted_memories?: MemoryCandidate[];
   duration_ms?: number;

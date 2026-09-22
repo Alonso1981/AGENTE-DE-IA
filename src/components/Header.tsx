@@ -38,6 +38,10 @@ export const Header: React.FC<HeaderProps> = ({
       title: 'Chat com Orquestrador Central',
       subtitle: 'Diálogo contextual com extração de memórias e diretrizes de escrita humanizada',
     },
+    agents: {
+      title: 'Central de Agentes & Especialistas',
+      subtitle: 'Interaja diretamente com cada agente especialista com personas e regras de negócios customizadas',
+    },
     'video-agents': {
       title: 'Agentes de Produção de Vídeos',
       subtitle: 'Criação de roteiros para vídeos curtos (Reels/TikTok) e longos (YouTube) com prompts para Veo & Runway',

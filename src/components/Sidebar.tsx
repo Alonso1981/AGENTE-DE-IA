@@ -17,12 +17,14 @@ import {
   BarChart3,
   Layers,
   Film,
+  Bot,
 } from 'lucide-react';
 import { SystemStatus } from '../types';
 
 export type NavTab =
   | 'dashboard'
   | 'chat'
+  | 'agents'
   | 'video-agents'
   | 'memories'
   | 'history'
@@ -46,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const activeItems: { id: NavTab; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'chat', label: 'Chat & Orquestrador', icon: MessageSquare },
+    { id: 'agents', label: 'Central de Agentes', icon: Bot },
     { id: 'video-agents', label: 'Agentes de Vídeo', icon: Film },
     { id: 'memories', label: 'Memórias', icon: Brain },
     { id: 'history', label: 'Histórico', icon: History },

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { db, defaultUserId, defaultFamilyId } from './supabase';
+import { generateContentResilient } from './gemini';
 import { VideoProject, VideoScene } from '../src/types';
 
 export interface VideoGenerateInput {
@@ -100,52 +101,37 @@ Gere agora o roteiro completo estruturado em JSON com todas as cenas e prompts d
 
   let projectData: Partial<VideoProject> = {};
 
-  if (apiKey) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000);
-
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`,
+  try {
+    const rawText = await generateContentResilient({
+      contents: [
         {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'aistudio-build',
-          },
-          body: JSON.stringify({
-            systemInstruction: {
-              parts: [{ text: systemPrompt }],
-            },
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: userPrompt }],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.7,
-              responseMimeType: 'application/json',
-            },
-          }),
-          signal: controller.signal,
-        }
-      );
+          role: 'user',
+          parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
+        },
+      ],
+      temperature: 0.7,
+      responseMimeType: 'application/json',
+    });
 
-      clearTimeout(timeoutId);
-
-      if (res.ok) {
-        const jsonRes = await res.json();
-        const rawContent = jsonRes.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (rawContent) {
-          projectData = JSON.parse(rawContent);
+    if (rawText) {
+      let cleanJson = rawText.trim();
+      cleanJson = cleanJson.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      try {
+        projectData = JSON.parse(cleanJson);
+      } catch (pErr) {
+        const start = cleanJson.indexOf('{');
+        const end = cleanJson.lastIndexOf('}');
+        if (start !== -1 && end !== -1 && end > start) {
+          try {
+            projectData = JSON.parse(cleanJson.substring(start, end + 1));
+          } catch {
+            // fallback will be triggered
+          }
         }
-      } else {
-        console.error('Gemini API returned error for video:', await res.text());
       }
-    } catch (err) {
-      console.error('Failed to call Gemini for video project:', err);
     }
+  } catch (err) {
+    console.error('Failed to call Gemini for video project:', err);
   }
 
   // Fallback intelligent generator if API key was missing or failed
