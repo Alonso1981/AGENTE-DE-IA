@@ -1469,7 +1469,7 @@ function createApp() {
   return app2;
 }
 
-// api/index.ts
+// server/api-entry.ts
 var app = createApp();
 function handler(req, res) {
   return app(req, res);

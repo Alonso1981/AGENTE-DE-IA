@@ -287,3 +287,5 @@ export function createApp(): Express {
 
   return app;
 }
+
+export default createApp;

@@ -192,8 +192,19 @@ export default function App() {
       });
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Erro HTTP ${res.status}`);
+        let errorText = '';
+        try {
+          const errorData = await res.json();
+          errorText = errorData.error || '';
+        } catch {
+          const raw = await res.text().catch(() => '');
+          if (raw.includes('FUNCTION_INVOCATION_FAILED')) {
+            errorText = 'A função Serverless na Vercel falhou (FUNCTION_INVOCATION_FAILED). Verifique se as variáveis de ambiente (GEMINI_API_KEY) estão cadastradas na Vercel e se o arquivo api/index.js foi sincronizado no GitHub.';
+          } else {
+            errorText = `Erro HTTP ${res.status} no servidor (${raw.slice(0, 80) || 'Falha de execução'})`;
+          }
+        }
+        throw new Error(errorText || `Erro HTTP ${res.status}`);
       }
 
       const data = await res.json();
